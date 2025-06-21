@@ -1,0 +1,533 @@
+---
+title: "Análise de Discriminante"
+author: "Matheus Nunes"
+date: "2024-12-24"
+output: 
+  html_document:
+    highlight: textmate
+    theme: flatly
+    number_sections: yes
+    toc: yes
+    code_folding: hide
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{=html}
+<style>
+body {
+font-family: "Roboto Thin", sans-serif;
+font-size: 16px;
+}
+</style>
+```
+
+```{=html}
+<style>
+body {
+text-align: justify;
+}
+</style>
+```
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+options(digits  = 4)
+knitr::opts_chunk$set(dpi = 500)
+knitr::opts_chunk$set(fig.width = 10, fig.height = 8)
+
+```
+
+```{r}
+library(ggplot2)
+library(readxl)
+library(gt)
+library(tidyverse)
+library(DT)
+library(MASS)
+library(caret)
+library(classifly)
+library(patchwork)
+library(klaR)
+library(biotools)
+```
+
+# Introdução
+
+A análise discriminante é uma técnica estatística que tem como objetivo
+classificar objetos em grupos pré-definidos. A análise discriminante é
+uma técnica de classificação supervisionada, ou seja, é necessário que
+os grupos sejam conhecidos previamente.
+
+As funções de discriminantes são construídas a partir de uma amostra de
+treinamento, que é utilizada para estimar os parâmetros do modelo. A
+partir da função discriminante, é possível classificar novos objetos em
+grupos, com base nas características observadas.
+
+Inicialmente iremos introduzir modelos de discriminantes para dados
+dicotômicos, ou seja, quando a variável resposta é binária.
+Posteriormente, iremos abordar modelos de discriminantes para dados
+multiclasse, ou seja, quando a variável resposta possui mais de duas
+categorias.
+
+Um exemplo visual pode ser observado na figura abaixo. Neste exemplo,
+temos duas amostras de dados, representadas pelas cores azul e vermelha.
+Nosso objetivo é construir uma função discriminante que seja capaz de
+separar as duas amostras de dados. A linha preta representa a função
+discriminante, que é capaz de separar as duas amostras de dados.
+
+```{r}
+Sample<-rnorm(1000, mean=15, sd=2)
+Sample2<-Sample+rnorm(1000,mean=10, sd=2)
+
+Sample3<-Sample2 + rnorm(1000,mean=2.75, sd=1.5)
+
+Amostra2<- data.frame("X" = Sample2, "Y" = Sample3, "Z" = "Amostra 2")
+Amostra1<- data.frame("X" = Sample2, "Y" = Sample, "Z" = "Amostra 1")
+
+Amostra<-rbind(Amostra1, Amostra2)
+
+ggplot(Amostra,aes(x=X, y=Y, colour = Z)) +
+  geom_point()+
+  theme_light()+
+  labs(
+    x="X",
+    y="Y",
+    colour = "Grupos"
+  )+
+  scale_color_manual(values=c("#1b6ca8", "#cd201f"))
+
+
+```
+
+```{r}
+ggplot(Amostra,aes(x=X, y=Y, colour = Z)) +
+  geom_point()+
+  theme_light()+
+  labs(
+    x="X",
+    y="Y",
+    colour = "Grupos"
+  )+
+  scale_color_manual(values=c("#1b6ca8", "#cd201f"))+
+  geom_abline(intercept =-3.25, color = "black",size=0.75)
+
+```
+
+Em situações mais práticas, nem sempre os dados estão bem separados como
+apresentado nas figuras a cima. Neste caso, a função discriminante irá
+tentar encontrar a melhor reta que separa os grupos, mesmo que os dados
+estejam sobrepostos.
+
+A figura abaixo apresenta um exemplo de dados que estão sobrepostos.
+Neste caso, a função discriminante irá tentar encontrar a melhor reta
+que separa os grupos, mesmo que os dados estejam sobrepostos.
+
+O modelo não é perfeito, portanto estamos sujeitos a erros de
+classificação. Iremos abordar os erros de classificação mais adiante.
+
+```{r}
+Norm<-data.frame(x1 = seq(-3, 3, length.out = 2000), y2 = 1/((2*pi)^(1/2))*exp(-(seq(-3, 3, length.out = 2000)^2)/2))
+
+
+ggplot(Amostra, aes(x = X))+
+  geom_line(data = Norm, aes(x = x1, y = y2), color = "#cd201f", size = 0.75)+
+  geom_line(data = Norm, aes(x = 2+x1, y = y2), color = "#1b6ca8", size = 0.75)+
+  labs(x = "", y = "")+
+  geom_vline(xintercept = 1, color = "black", size = 0.75,linetype = "dashed")+
+  theme_light()
+```
+
+# Método de Fisher
+
+O método de Fisher é uma técnica de análise discriminante que tem como
+objetivo encontrar a melhor reta que separa os grupos. O método de
+Fisher exige que a matriz de variância e covariância seja a mesma para
+os 2 grupos.
+
+Supondo que tenhamos a seguinte combinação linear: $$
+Y = \alpha^\top x
+$$ A média para as duas populações de dados é dada por:
+
+$$
+\mu_{iY} = \alpha^\top \mu_i, \quad i = 1,2
+$$ E a variância para as duas populações de dados é dada por: $$
+\sigma^2_Y = \alpha^\top \Sigma \alpha
+$$ A variância de Y é a mesma para as duas populações.
+
+Observando a última figura, é possível notar que quanto maior a
+distância entre as médias das populações, menor será a intersecção entre
+as distribuições fazendo com que a chance de erro de classificação seja
+menor. Diante disto o método de Fisher busca maximizar a distância entre
+as médias das populações e minimizar a variância intra-classe.
+
+A ideia do método de Fisher é encontrar a melhor reta que separa as duas
+populações de dados. Maximizando a seguinte razão:
+
+$$
+\Delta = \frac{(\mu_{1Y} - \mu_{2Y})^2}{\sigma^2_Y} =
+$$
+
+$$ 
+\frac{(\alpha^\top \delta)^2}{\alpha^\top \Sigma \alpha},     
+$$ $\delta = (\mu_1 + \mu_2)$, a parte superior da razão é a distância
+ao quadrado entre as médias das populações e a parte inferior é a
+variância.
+
+Os coeficientes da combinação linear são obtidos pela desigualdade
+Cauch-Schwarz. Os cálculos serão omitidos, mas a função discriminante
+linear de Fisher é dada por:
+
+$$
+Y = \alpha^\top x = (\mu_1 + \mu_2)   \Sigma^{-1} x.
+$$ Embora seja simples o método de Fisher, na prática, a matriz de
+variância e covariância não é a mesma para os 2 grupos. Para isso iremos
+apresentar o método geral de classificação.
+
+# Método Geral de Classificação
+
+O método geral de classificação é uma técnica de análise discriminante
+que tem como objetivo encontrar a melhor reta que separa os grupos. O
+método geral de classificação não exige que a matriz de variância e
+covariância seja a mesma para os 2 grupos, mas exige que conheçamos as
+distriuições das populações que também podem ser estimadas.
+
+Primeiramente iremos abordar a esperança condicional do custo, também
+chamada de ECI e que é definido como:
+
+$$
+ECI_i = \sum_{j=1,j\neq i}^{k}P(j|i,R)C(j|i)
+$$ Suponha que tenhamos $\pi_k$ populações, e precisamos classificar um
+objeto em uma das $\pi_k$ populações. Precisamos definir uma regra $R$
+de classificação para dividir nosso espaço amostral em $k$ regiões
+disjuntas, de maneira que o indivíduo pertença a uma das $k$ regiões. A
+regra de classificação é sucetível a erros, e o custo de classificação é
+dado por $C(j|i)$, que é o custo de classificar um objeto na população
+$j$ quando ele pertence a população $i$. O custo de classificação é uma
+matriz de custo, onde a diagonal principal é zero, pois o custo de
+classificar um objeto na população correta é zero.
+
+A ideia do método geral de classificação é minimizar o custo de
+classificação, ou seja, encontrar a regra de classificação que minimiza
+o custo de classificação.
+
+Considerando que tenhamos a probabilidade de cada população ocorrer, e
+denotando-a por $p_i$ com $i = 1,2,3,...,k$ essa probabilidade é chamada
+a priori. Utilizando os pesos temos a seguinte ECI:
+
+$$
+ECI_i = \sum_{i=1}^kp_i \left[ \sum_{j=1,j\neq i}^{k} P(j|i,R)C(j|i) \right]
+$$A ideia da classificação consiste na minimização do ECI, portanto
+devemos classificar x em $\pi_i$, se a quantidade a seguir for mínimo:
+
+$$
+h_i(x)=\sum_{j=1,j\neq i}^{k}p_jf_j(x)C(j|i)
+$$ Em todos os possíveis valores de $l$, onde $l = 1,2,3,...,k$, de
+outra maneira: $h_i(x) = \min\limits_{l}h_l(x)$ Em resumo, classificamos
+um índividuo $x$ na população $\pi_i$ se o custo médio das
+classificações incorretas da observação $p-$variada em $\pi_i$, em
+relação a todas as demais populações, for mínimo. Supondo que tenhamos
+apenas duas populações, podemos escrever a regra de classificação como:
+
+$$
+\frac{f_1(x)}{f_2(x)} \geq \frac{C(1|2) }{C(2|1)} \frac{p_2}{p_1}
+$$ Classificamos o índivíduo $x$ na população $p_1$ se essa desigualdade
+for verdadeira, caso contrário classificamos o indivíduo na população
+$p_2$. Caso o custo de classificação seja igual para as duas populações,
+a regra de classificação se torna:
+
+$$
+\frac{f_1(x)}{f_2(x)} \geq \frac{p_2}{p_1}
+$$ Se a probabilidade de um índivíduo pertencer a qualquer uma das 2
+populações for igual, a regra de classificação se torna:
+
+$$
+\frac{f_1(x)}{f_2(x)} \geq 1
+$$
+
+## Exemplo
+
+Suponha que tenhamos 2 populações, sendo ambas uma distribuição
+exponencial. A densidade de uma distribuição exponencial é dada por:
+
+$$
+f(x) = \lambda e^{-\lambda x}
+$$ Seja $\pi_1$ a população 1 e $\pi_2$ a população 2 de parâmetros
+$\lambda_1 = 5$ e $\lambda_2 = 0.5$ respectivamente.
+
+```{r}
+lambda1<-5
+lambda2<-0.5
+exp_data1 <- data.frame(x1 = seq(0, 6, length.out = 2000), y1 = lambda1*exp(-lambda1*(seq(0, 4, length.out = 2000))))
+
+exp_data2 <- data.frame(x1 = seq(0, 6, length.out = 2000), y1 = lambda2*exp(-lambda2*(seq(0,4, length.out = 2000))))
+
+
+ggplot(Amostra, aes(x = X))+
+  labs(x = "", y = "")+
+  geom_line(data = exp_data1, aes(x = x1, y = y1), color = "#cd201f", size = 0.75)+
+  geom_line(data = exp_data2, aes(x = x1, y = y1), color = "#1b6ca8", size = 0.75)+
+  theme_light()
+```
+
+A figura acima apresenta as distribuições de probabilidade das duas
+populações. A população 1 é representada pela cor vermelha e a população
+2 é representada pela cor azul.
+
+Usando a fórmula anterior e supondo que o custo de classificação
+incorreta é igual para as duas populações, e a probabilidade de um
+indivíduo pertencer a qualquer uma das 2 populações é igual, a regra de
+classificação se torna:
+
+$$
+\frac{ 5e^{-5x}}{0.5e^{-0.5x}} \geq 1 \\
+10e^{(0.5-5)x} \geq 1 \\
+e^{-4.5x} \geq 10 \\
+-4.5x \geq -ln(10) \\
+-x \geq -\frac{ln(10)}{4.5} \\
+x \leq 0.5117
+$$
+
+Portanto, se $x \leq 0.5117$, classificamos o indivíduo na população 1,
+caso contrário classificamos o indivíduo na população 2.
+
+```{r}
+ggplot(Amostra, aes(x = X))+
+  labs(x = "", y = "")+
+  geom_line(data = exp_data1, aes(x = x1, y = y1), color = "#cd201f", size = 0.75)+
+  geom_line(data = exp_data2, aes(x = x1, y = y1), color = "#1b6ca8", size = 0.75)+
+  theme_light()+
+  geom_vline(xintercept = 0.5117, color = "black", size = 0.75,linetype = "dashed")
+```
+
+A figura acima apresenta a reta que separa as duas populações de dados.
+A reta preta representa a regra de classificação, onde se
+$x \geq 0.5117$. Também podemos calcular as probabilidades de erros de
+classificação, $P(1|2)$ e $P(2|1)$, probabilidade do indivíduo pertencer
+a população 1 quando ele pertence a população 2 e vice-versa
+respectivamente, através das seguintes integrais:
+
+$$
+P(1|2) = \int_{0}^{0.5117} 0.5 e^{-0.5x} dx  \approx 0.2257 \\
+P(2|1) = \int_{0.5117}^{\infty} 5e^{-5x} dx \approx 0.0774
+$$
+
+Portanto, a probabilidade de um indivíduo pertencer a população 1 quando
+ele pertence a população 2 é de aproximadamente 22.57% e a probabilidade
+de um indivíduo pertencer a população 2 quando ele pertence a população
+1 é de aproximadamente 7.74%.
+
+## Simulando uma amostra
+
+O gráfico abaixo apresenta a densidade das duas populações de dados das
+distribuições exponenciais, onde a população 1 é representada pela cor
+vermelha e a população 2 é representada pela cor azul. A amostra foi
+gerada a partir de 100 observações de cada população.
+
+```{r}
+set.seed(123)
+amostra1<-rexp(100, rate = 5)
+amostra2<-rexp(100, rate = 0.5)
+
+Exemplo<-data.frame("X" = c(amostra1, amostra2), "População" = c(rep("População 1", 100), rep("População 2", 100)))
+
+ggplot(Exemplo, aes(x = X, fill = População))+
+  geom_density(alpha = 0.5)+
+  theme_light()+
+  labs(x = "X", y = "Densidade")+
+  scale_fill_manual(values=c("#cd201f", "#1b6ca8"))
+
+```
+
+A tabela abaixo apresenta a amostra gerada, onde a coluna X representa
+os valores da amostra e a coluna População representa a população de
+origem dos valores e a coluna predito, a classificação feita pela regra
+de classificação.
+
+```{r}
+Predito<- ifelse(Exemplo$X <= 0.5117, "Pop 1", "Pop 2")
+Exemplo<-cbind(Exemplo, "Predito" = Predito)
+datatable(Exemplo,
+          class = "row-border hover",
+          options = list(
+            scrollX = TRUE,
+            dom = 'ltipr'
+          )) %>% 
+  formatRound(columns = 1, digits = 4)
+```
+
+```{r}
+
+table(Exemplo$População, Exemplo$Predito)
+
+```
+
+Na tabela acima, temos a matriz de confusão, onde a diagonal principal
+representa as classificações corretas e a diagonal secundária representa
+as classificações incorretas. acertamos 173 classificações e erramos 27
+classificações, uma taxa de acerto de 86.5%. 7 indivíduos da população 1
+foram classificados na população 2 e 20 indivíduos da população 2 foram
+classificados na população 1. Tendo um erro de 7% e 20% respectivamente,
+se aproximando das probabilidades calculadas anteriormente.
+
+## Exercício para o leitor
+
+Como exercício deixamos ao leitor para que encontre o ponto de corte
+para a regra de classificação quando o custo de classificação incorreta
+$C(1|2) = 5$ e $C(2|1) = 1$, e caso as probabilidades de um indivíduo
+pertencer a qualquer uma das 2 populações sejam diferentes, por exemplo
+$p_1 = 0.3$ e $p_2 = 0.7$, basta subistituir os valores na fórmula de
+classificação:
+
+$$\frac{f_1(x)}{f_2(x)} \geq \frac{C(1|2) }{C(2|1)} \frac{p_2}{p_1}$$
+tendo então:
+
+$$
+\frac{f_1(x)}{f_2(x)} \geq \frac{5 }{1} \frac{0.7}{0.3}
+$$\
+
+# Usando o R para Análise Discriminante
+
+Para realizar a análise discriminante no R precisamos de um conjunto de
+dados, vamos utilizar o conjunto de dados chamado Iris, que contém 150
+observações de 3 espécies de flores Iris, cada observação contém 4
+variáveis: comprimento e largura da sépala e comprimento e largura da
+pétala.
+
+```{r}
+Dados<-iris
+datatable(Dados,
+          class = "row-border hover",
+          options = list(
+            scrollX = TRUE,
+            dom = 'ltipr'
+          ))
+```
+
+Como o conjunto de dados possui 4 variáveis, podemos fazer 2 biplots
+para visualizar os dados. O primeiro biplot apresenta o comprimento e
+largura da sépala e o segundo biplot apresenta o comprimento e largura
+da pétala, de maneira que as espécies de flores são representadas por
+cores diferentes.
+
+```{r}
+G1<-ggplot(Dados, aes(x = Sepal.Length, y = Sepal.Width, color = Species))+
+  geom_point(size = 2)+
+  scale_color_manual(values=c("#cd201f", "#1b6ca8","#3aaf85"))+
+  theme_light()+
+  labs(x = "Comprimento da Sépala", y = "Largura da Sépala", color = "Espécies")
+
+G2<-ggplot(Dados, aes(x = Petal.Length, y = Petal.Width, color = Species))+
+  geom_point(size = 2)+
+  scale_color_manual(values=c("#cd201f", "#1b6ca8","#3aaf85"))+
+  theme_light()+
+  labs(x = "Comprimento da Pétala", y = "Largura da Pétala", color = "Espécies")
+
+G1+G2
+```
+
+Para realizar a análise discriminante separamos 70% dos dados para treino e 30% dos dados para teste. A função lda() realiza a análise discriminante linear, onde a variável resposta é
+Species e as variáveis preditoras são Sepal.Length, Sepal.Width,
+Petal.Length e Petal.Width.
+
+Como não informamos as probabilidades a priori, a função lda() assume
+que as probabilidades a priori da população é o mesmo da amostra, mas
+isso pode ser alterado através do argumento prior. que por exemplo
+supondo que a probabilidade de uma flor ser da espécie setosa é de 0.3,
+a probabilidade de uma flor ser da espécie versicolor é de 0.4 e a
+probabilidade de uma flor ser da espécie virginica é de 0.3, podemos
+informar isso através do argumento prior = c(0.3, 0.4, 0.3) dentro da
+função lda().
+
+```{r}
+treino <- iris$Species %>%
+  createDataPartition(p = 0.7, list = F)
+train <- iris[treino, ]
+test <- iris[-treino, ]
+LD<-lda(Species ~ ., data = train)
+LD
+```
+
+A função lda() retorna as médias das variáveis preditoras para cada
+espécie, os coeficientes da função discriminante linear e também a
+proporção de variância explicada por cada função discriminante. Como
+temos 50 observações de cada espécie, perceba que no topo da saída temos
+as proporções a priori de cada espécie.
+
+A seguir temos a matriz de confusão, onde para testar a qualidade do
+modelo de discriminante linear utilizamos os dados de teste, nosso
+modelo obteve uma taxa de acerto de 95.6%.
+
+```{r}
+Predito<-predict(LD, test)
+confusionMatrix(table(test$Species, Predito$class))
+```
+
+A figura a seguir apresenta o gráfico de dispersão das duas primeiras
+funções discriminantes, onde as espécies de flores são representadas por
+cores diferentes.
+
+```{r}
+plda <- data.frame(Predito$x)
+plda$Species <- test$Species
+
+ggplot(plda,aes(x=LD1, y=LD2, colour=Species)) + 
+  geom_point(size = 2)+
+  scale_color_manual(values=c("#cd201f", "#1b6ca8","#3aaf85"))+
+  theme_minimal()+
+  labs(color = "Espécies")
+```
+
+A seguir temos uma simulação de dados, para melhor observarmos a
+separação das espécies de flores, utilizamos a função explore() para
+visualizar a separação das espécies de flores, onde as espécies de
+flores são representadas por cores diferentes, os valores reais são
+diferenciados por formas geométricas diferentes e os valores preditos
+são representados por pontos coloridos.
+
+```{r}
+class<- explore(LD, data = train)
+
+plda2 <- class[
+  class$.TYPE == "simulated", 
+  c(1:4, 6)]
+plda3<- data.frame(as.matrix(plda2[,1:4]) %*%
+                     LD$scaling)
+
+plda3$Species <- plda2$Species
+
+pred1<- data.frame(Predito$x)
+pred1$Species <- test$Species
+
+ggplot(plda3, 
+       aes(x=LD1, y=LD2, 
+           colour=Species)) +
+  geom_point(alpha=0.5) +  
+  scale_color_manual(values=c("#cd201f", "#1b6ca8","#3aaf85"))+
+  geom_point(data=pred1, aes(x=LD1, 
+                             y=LD2, 
+                             shape=Species),
+             inherit.aes = FALSE) +
+  scale_shape_manual(values=c(1, 2, 3)) +
+  theme_minimal() +
+  theme(aspect.ratio = 1, 
+        legend.position = "bottom",
+        legend.title = element_blank()) 
+```
+
+
+# Referências
+
+FERREIRA, Daniel Furtado. Estatística Multivariada. Lavras: UFLA - Universidade Federal de Lavras, 2018. 624 p. ISBN 978-85-81270-63-0.
+
+
+
+
+
+
+

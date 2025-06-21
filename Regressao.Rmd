@@ -1,0 +1,277 @@
+---
+title: "Regressão Linear e Regularização"
+author: "Matheus Nunes"
+date: "2024-12-18"
+output: 
+  html_document:
+    highlight: textmate
+    theme: flatly
+    number_sections: yes
+    toc: yes
+    code_folding: hide
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+```{=html}
+<style>
+body {
+  font-family: "Roboto Thin", sans-serif;
+  font-size: 16px;
+}
+</style>
+```
+```{=html}
+<style>
+body {
+  text-align: justify;
+}
+</style>
+```
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+options(digits  = 4)
+knitr::opts_chunk$set(dpi = 500)
+knitr::opts_chunk$set(fig.width = 12, fig.height = 8)
+
+```
+
+```{r}
+library(ggplot2)
+library(patchwork)
+library(performance)
+library(readxl)
+library(gt)
+library(tidyverse)
+library(glmnet)
+```
+
+
+# Introdução
+A análise de regressão é uma ferramenta estatística usada para entender a relação entre variáveis independentes e uma variável dependente. É amplamente utilizada em diversos campos, como economia, biologia, engenharia e ciências sociais, para modelar e prever comportamentos.
+
+Existem vários tipos de modelos de regressão, cada um adequado para diferentes tipos de dados e questões de pesquisa. A seguir, vamos explorar alguns dos modelos mais populares: a regressão linear, a regressão de Ridge, a regressão Lasso e a Elastic Net.
+
+## Regularização
+
+As técnicas de regularização são muito utilizadas em modelos de aprendizado de máquina, pois ajudam a evitar o overfitting e a melhorar a generalização do modelo. A regularização adiciona uma penalidade aos coeficientes do modelo, incentivando a simplicidade e evitando que os coeficientes se tornem muito grandes. Isso é particularmente útil em situações onde há muitas variáveis independentes ou colinearidade entre as variáveis. Embora a regularização possa tornar o modelo mais simples, ela possui um viés e também tende a reduzir a variância, resultando em modelos mais estáveis, para testar a qualidade do ajuste o conjunto de dados foi dividido em duas partes, uma para treino do modelo e outra para teste, a métrica utilizada para avaliar a qualidade do ajuste foi o erro quadrático médio.
+
+# Regressão Linear
+A regressão linear é o modelo de regressão mais básico e amplamente conhecido. Ela assume uma relação linear entre as variáveis independentes e a variável dependente. Seu objetivo é encontrar a linha reta que melhor ajusta os dados, minimizando a soma dos quadrados dos resíduos (as diferenças entre os valores observados e os previstos).
+
+## Correlação linear
+
+A figura abaixo apresenta um exemplo simples de tipos de correlação entre duas variáveis. No primeiro gráfico, não há correlação entre as variáveis (correlação ausente). No segundo gráfico, há uma correlação positiva entre as variáveis. No terceiro gráfico, há uma correlação negativa entre as variáveis.
+
+```{r}
+Sample<-rnorm(1000)
+Sample2<-rnorm(1000)
+
+# Geom points
+
+G1<-ggplot(,aes(x=Sample, y=Sample2)) +
+  geom_point(color = "#1b6ca8")+
+  theme_light()+
+  labs(title="Correlação ausente",
+       x="X",
+       y="Y")
+
+# Criar duas amostras aleatórias que contenham correlação positiva
+
+Sample3<-rnorm(1000)
+Sample4<-Sample3+rnorm(1000)
+
+# Geom points
+
+G2<-ggplot(data=NULL, aes(x=Sample3, y=Sample4))+
+  geom_point(color = "#3aaf85")+
+  theme_light()+
+  labs( title="Correlação linear positiva",
+       x="X",
+       y="Y")
+
+# Criar duas amostras aleatórias que contenham correlação negativa
+
+Sample5<-rnorm(1000)
+Sample6<- -Sample5+rnorm(1000)
+
+# Geom points
+
+G3<-ggplot(data=NULL, aes(x=Sample5, y=Sample6)) +
+  geom_point(color = "#cd201f")+
+  theme_light()+
+  labs( title="Correlação linear negativa",
+       x="X",
+       y="Y")
+
+# Juntando os 3 gráficos usando o facet_wrap
+
+G1+G2+G3
+```
+
+
+
+
+## Ajuste do modelo de regressão linear
+
+Neste trecho de código foi carregado o conjunto de dados "ENB2012_data.xlsx" que contém informações sobre a eficiência energética de edifícios. O objetivo é prever a variável Y2 (carga de resfriamento) com base nas variáveis independentes X1 a X8. O conjunto de dados foi dividido em 70% para treino e 30% para teste. Em seguida, foi ajustado um modelo de regressão linear usando todas as variáveis independentes.
+```{r}
+Dados<- read_excel("ENB2012_data.xlsx")
+Dados<- Dados %>% 
+  select(X1, X2, X3, X4, X5, X6, X7, X8, Y2)
+
+#Selecionando os dados para treinar
+
+Size<- floor(0.7*nrow(Dados))
+train<- sample(seq_len(nrow(Dados)), Size)
+test<- Dados[-train,]
+train<- Dados[train,]
+
+lm_model <- lm(Y2~ X1+X2+X3+X4+X5+X6+X7+X8,train)
+
+```
+
+Para a seleção de variáveis, foi utilizado o método stepwise, que avalia todas as combinações possíveis de variáveis e seleciona o melhor modelo com base em um critério de seleção. Neste caso, o critério escolhido foi o BIC (Bayesian Information Criterion), que penaliza modelos mais complexos. O modelo selecionado pelo método stepwise foi ajustado e avaliado em relação ao modelo de regressão linear original.
+
+## Seleção de variáveis via stepwise
+A seleção de variáveis pode ser obtida através do seguinte código:
+stepwise_model <- step(lm_model, direction = "both", k = log(nrow(train)))
+
+Omiti a saída pois é um pouco grande, mas você pode executar o código no seu ambiente para ver os resultados.
+
+```{r, include=FALSE}
+stepwise_model <- step(lm_model, direction = "both", k = log(nrow(train)))
+```
+
+
+
+
+```{r}
+
+sum1 <- summary(stepwise_model)
+
+coefs1 <- coef(stepwise_model) %>% 
+        .[!is.na(.)]
+      
+      df1 <- sum1$coefficients %>% 
+                as.data.frame() %>% 
+                cbind(rownames(.), ., confint(stepwise_model, parm = names(coefs1))) %>% 
+                select(1:3, 6:7, 5)
+  
+      names(df1)[1]<- "Variables"
+      
+      gt(df1) %>%
+        tab_header(title = md("**Resumo do modelo selecionado pelo stepwise**")) %>%
+        fmt(
+          columns = c(2:6),
+          fns = function(x)
+            format(
+              round(x, 4),
+              #big.mark = ".",
+              #decimal.mark = ",",
+              nsmall = 4,
+              scientific = FALSE
+            )
+        )  %>%
+        tab_spanner(label = "CI 95%",
+                    id = "unique_id",
+                    columns = c(4,5)) %>%
+        tab_footnote(c("R-squared:", round(sum1$r.squared, 4))) %>%
+        tab_footnote(c("Adjusted R-squared:", round(sum1$adj.r.squared, 4))) %>%
+        tab_footnote(c("Residual standard error:", round(sum1$sigma, 4))) %>%
+        opt_stylize(style = 3, color = "blue") %>% 
+        tab_options(  table.width ="100%")
+```
+A seleção via stepwise retirou as variáveis X4,X6 e X8 do modelo, o que resultou em um modelo mais simples e com um BIC menor. O modelo selecionado apresentou um R-quadrado ajustado de 0.8894 e um erro padrão residual de 3.1995.
+
+## Avaliação do modelo de regressão linear
+
+```{r}
+Predict<-predict(stepwise_model, test)
+sqrt(mean((Predict-test$Y2)^2))
+
+```
+
+# Regressão de Ridge
+
+
+A regressão utilizando a regularização de Ridge consiste em encontrar o ponto mínimo desta função, sendo o segundo membro dela a penalização.
+
+$$ \sum_{i=1}^{n} (y_i - \beta^Tx_t)^2 + \lambda \sum_{j=1}^{p} \beta_j^2$$
+
+
+A regressão de Ridge é uma variação da regressão linear que incorpora uma penalidade ao tamanho dos coeficientes. Isso é útil em situações onde há colinearidade entre as variáveis independentes. Ao adicionar essa penalidade, a regressão de Ridge tende a produzir modelos mais estáveis e evita o overfitting.
+
+
+```{r}
+ridge_model <- cv.glmnet(as.matrix(train[,1:8]), train$Y2, alpha = 0)
+plot(ridge_model)
+```
+
+O gráfico anterior mostra a variação do erro quadrático médio em função do log de lambda, que é o coeficiente de regularização. O valor de lambda que minimiza o erro quadrático médio é chamado de lambda mínimo. As linhas tracejadas na vertical indicam o valor de lambda que minimiza o erro quadrático médio e o valor com a maior regularização em que o erro quadrático médio não seja maior que o mínimo multiplicado mais um desvio padrão.
+
+```{r}
+coef(ridge_model, s = "lambda.min")
+```
+## Extraindo o erro quadrático médio
+```{r}
+Predict<-predict(ridge_model, as.matrix( test[,1:8]))
+sqrt(mean((Predict-test$Y2)^2))
+
+```
+
+
+# Regressão Lasso
+
+A regularização de Lasso é obtida através da minimização da seguinte função:
+$$ \sum_{i=1}^{n} (y_i - \beta^Tx_t)^2  + \lambda \sum_{j=1}^{p} |\beta_j|$$
+
+A regressão Lasso (Least Absolute Shrinkage and Selection Operator) também adiciona uma penalidade aos coeficientes, mas de forma diferente da regressão de Ridge. A penalidade Lasso pode forçar alguns coeficientes a zero, efetivamente selecionando um subconjunto de variáveis independentes. Isso torna a regressão Lasso útil para seleção de variáveis e simplificação de modelos.
+
+```{r}
+lasso_model <- cv.glmnet(as.matrix(train[,1:8]), train$Y2, alpha = 1)
+plot(lasso_model)
+```
+
+```{r}
+coef(lasso_model, s = "lambda.min")
+```
+
+## Extraindo o erro quadrático médio
+```{r}
+Predict<-predict(lasso_model, as.matrix( test[,1:8]))
+sqrt(mean((Predict-test$Y2)^2))
+```
+
+
+# Regressão Elastic Net
+
+A regularização Elastic Net é obtida através da minimização da seguinte função que é uma combinação da regularização Ridge e Lasso:
+$$\sum_{i=1}^{n} (y_i - \hat{y}i)^2 + \lambda_1 \sum_{j=1}^{p} |\beta_j| + \lambda_2 \sum_{j=1}^{p} \beta_j^2$$
+
+A regressão Elastic Net combina os aspectos de penalidade da regressão de Ridge e da regressão Lasso. Ela usa uma combinação das penalidades L1 (Lasso) e L2 (Ridge), permitindo maior flexibilidade. O Elastic Net é especialmente útil quando há muitas variáveis independentes correlacionadas, pois pode selecionar grupos de variáveis correlacionadas em conjunto.
+
+
+```{r}
+elastic_model <- cv.glmnet(as.matrix(train[,1:8]), train$Y2, alpha = 0.5)
+plot(elastic_model)
+```
+
+
+```{r}
+coef(elastic_model, s = "lambda.min")
+```
+
+## Extraindo o erro quadrático médio
+```{r}
+Predict<-predict(elastic_model, as.matrix( test[,1:8]))
+sqrt(mean((Predict-test$Y2)^2))
+```
+
+
+A regressão linear obtida pelo método de seleção de variáveis stepwise apresentou o menor erro quadrático médio entre os modelos testados. No entanto, é importante ressaltar que a escolha do modelo depende do contexto e dos objetivos da análise. Cada modelo tem suas vantagens e limitações, e é importante considerar esses aspectos ao escolher o modelo mais adequado para os dados e a questão de pesquisa em questão.

@@ -1,0 +1,137 @@
+---
+title: "Análise Fatorial"
+author: "Matheus Nunes Paiva"
+date: "2024-05-12"
+output: 
+  html_document:
+    highlight: textmate
+    theme: flatly
+    number_sections: yes
+    toc: yes
+    code_folding: hide
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{=html}
+<style>
+body {
+  font-family: "Roboto Thin", sans-serif;
+  font-size: 16px;
+}
+</style>
+```
+```{=html}
+<style>
+body {
+  text-align: justify;
+}
+</style>
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+options(digits  = 4)
+knitr::opts_chunk$set(dpi = 275)
+knitr::opts_chunk$set(fig.width = 11, fig.height = 8)
+```
+
+# Introdução
+
+A análise fatorial é uma técnica estatística usada para identificar estruturas latentes que explicam as correlações entre um grande número de variáveis observadas. Ela busca encontrar fatores não observáveis que causam variações comuns em um conjunto de variáveis observadas. Esses fatores são estimados com base nas correlações entre as variáveis, e a interpretação dos fatores é facilitada por técnicas de rotação. A análise fatorial é amplamente utilizada em várias disciplinas, como psicologia, educação, marketing e ciências sociais, para entender padrões complexos, reduzir a dimensionalidade dos dados e interpretar variáveis com forte correlação.
+# Carregando os pacotes
+
+```{r}
+library(tidyverse)
+library(readr)
+library(FactoMineR)
+library(factoextra)
+library(DT)
+library(ggplot2)
+library(ggcorrplot)
+library(corrplot)
+library(gt)
+library(psych)
+library(GPArotation)
+library(QuantPsyc)
+```
+
+# Conjunto de dados
+
+Este conjunto de dados resume um conjunto heterogêneo de características sobre artigos publicados pela Mashable em um período de dois anos.
+
+Foram selecionadas apenas 15 variáveis e 400 observações para a análise fatorial, devido a grande extensão do conjunto de dados original e devido a problemas em rodar a análise fatorial com um número muito grande de observações.
+
+```{r,echo = FALSE}
+dados <- read.csv("OnlineNewsPopularity.csv",sep = ",")
+dados <- dados[,c(2:13,20:31,40:61)]
+dados <- dados[,c(1:3,11:23,46)]
+dados <- dados[,-3]
+dados <- dados[,-4]
+dados <- dados[sample(nrow(dados), 400), ]
+datatable(dados,
+           class = "row-border hover",
+      options = list(
+        scrollX = TRUE,
+        dom = 'ltipr'
+      ))
+```
+
+Iremos aplicar a o teste de Bartlett para verificar se a matriz de
+correlação é adequada para a análise fatorial.
+
+```{r}
+cortest.bartlett(cor(dados),n=nrow(dados))
+```
+
+Como o valor p do teste de Bartlett é menor que 0.05, rejeitamos a
+hipótese nula de que a matriz de correlação é uma matriz de identidade,
+indicando que existe ao menos uma correlação significativa entre as
+variáveis.
+
+# Matriz de correlação
+
+```{r}
+ ggcorrplot(
+            cor(dados),
+            hc.order = T,
+            type = "lower",
+            lab = T,
+            colors = c("#003262", "#FFFFFF", "#D21E1C")
+          )
+
+```
+
+Pela matriz de correlação é possível observar que a maioria das
+variáveis não possuem correlação significativa entre si.
+
+# Análise Fatorial
+
+
+
+```{r}
+AFr<-fa(dados,nfactors=3, rotate = "varimax")
+AFr
+```
+A primeira coisa a ser observada nesta saída é o valor de TLI, ou Tucker-Lewis Index, que é uma medida de ajuste do modelo. O TLI varia de 0 a 1, e valores acima de 0.9 indicam um bom ajuste do modelo. Neste caso o TLI é de aproximadamente 0.6, indicando que o modelo não se ajusta muito bem aos dados.
+
+Porém supondo que o modelo se ajuste bem aos dados, a saída da análise fatorial nos fornece informações sobre os fatores extraídos, como a comunalidade, a variância explicada e a carga fatorial de cada variável em cada fator.
+
+Para facilitar a interpretação irei extrair as cargas fatoriais maiores que 0.4. Cargas abaixo dessa magnitude são consideradas fracas e podem ser ignoradas.
+
+# Extraindo cargas maiores que 0.4
+
+```{r}
+print(AFr$loadings,cutoff = 0.4)
+```
+Pela saída acima, é possível observar que a maioria das variáveis possuem cargas fatoriais significativas em pelo menos um dos fatores extraídos. As cargas fatoriais variam de -1 a 1, e valores próximos de 1 indicam uma relação forte entre a variável e o fator, cargas próximas de 0 indicam que a variável não está relacionada ao fator e cargas próximas de -1 indicam uma relação negativa entre a variável e o fator.
+
+Outra coisa a ser observada é a variância acumulada para os três fatores, que é de 0.428, o ideal é que a variância acumulada seja maior que 0.6, no nosso exemplo o ideal seria extrair mais fatores.
+
+# Referências
+
+Fernandes,Kelwin, Vinagre,Pedro, Cortez,Paulo, and Sernadela,Pedro. (2015). Online News Popularity. UCI Machine Learning Repository. https://doi.org/10.24432/C5NS3V.
+

@@ -1,0 +1,227 @@
+---
+title: "Naive Bayes em R"
+author: "Matheus Nunes"
+date: "2025-01-04"
+output: 
+  html_document:
+    highlight: textmate
+    theme: flatly
+    number_sections: yes
+    toc: yes
+    code_folding: hide
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{=html}
+<style>
+body {
+font-family: "Roboto Thin", sans-serif;
+font-size: 16px;
+}
+</style>
+```
+
+```{=html}
+<style>
+body {
+text-align: justify;
+}
+</style>
+```
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+options(digits  = 4)
+knitr::opts_chunk$set(dpi = 500)
+knitr::opts_chunk$set(fig.width = 10, fig.height = 8)
+
+```
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(DT)
+library(patchwork)
+library(naivebayes)
+library(caret)
+```
+
+# Introdução
+
+O algoritmo Naive Bayes é um classificador probabilístico baseado no
+teorema de Bayes, que é utilizado para resolver problemas de
+classificação. O algoritmo é chamado de "naive" (ingênuo) porque ele
+assume que as variáveis preditoras são independentes, o que nem sempre é
+verdade. Apesar disso, o algoritmo é muito utilizado em problemas de
+classificação de texto, como análise de sentimentos e classificação de
+documentos.
+
+# Teorema de Bayes
+
+O teorema de Bayes é uma fórmula que descreve a probabilidade de um
+evento, baseado em conhecimento prévio que pode estar relacionado ao
+evento. A fórmula é dada por:
+
+$$
+P\left(A \mid B\right) = \frac{P\left(B \mid A\right) \cdot P\left(A\right)}{P\left(B\right)}
+$$\
+
+## Classificador de naive Bayes
+
+seja $x_i$ o conjunto de variáveis preditoras e $y_j$ a variável
+resposta, de modo que $y$ pertença a uma classe, resumindo:
+$y_j \in \{y_1, y_2, \ldots, y_c\}$, onde $c$ é o número de classes. Da
+fórmula de Bayes, temos que:
+
+$$
+P\left(y_j \mid \mathbf{x_i}\right) = \frac{ P\left(\mathbf{x_i} \mid y_j\right)\cdot P\left(y_j\right) }{P\left(\mathbf{x_i}\right)}
+$$ Obserque o numerador da equação acima é a probabilidade conjunta de
+$x_i$ e $y_j$, então podemos reescrever o numerador da equação acima
+como: $$
+\begin{aligned}
+P\left({x_i} \mid y_j\right) P\left(y_j\right) & =P\left({x_i}, y_j\right) \\
+& =P\left(x_1, x_2, \ldots, x_p, y_j\right) \\
+& =P\left(x_1 \mid x_2, x_3, \ldots, x_{\mathbf{p}}, y_{\dot{j}}\right) P\left(x_2, x_3, \ldots, x_p, y_j\right) \text { porque } P(a, b)=P(a \mid b) P(b) \\
+& =P\left(x_1 \mid x_2, x_3, \ldots, x_{\mathbf{p}}, y_{\dot{j}}\right) P\left(x_2 \mid x_3, x_4, \ldots, x_p, y_j\right) P\left(x_3, x_4, \ldots, x_p, y_j\right) \\
+& =P\left(x_1 \mid x_2, x_3, \ldots, x_p, y_j\right) P\left(x_2 \mid x_3, x_4, \ldots, x_p, y_j\right) \cdots P\left(x_p \mid y_j\right) P\left(y_j\right)
+\end{aligned}
+$$ Assumindo que as variáveis preditoras $(x_i)$ são independentes,
+temos que $P(x_1|x_2,x_3,...,x_p,y_j) = P(x_1|y_j)$. Assumir que as
+variáveis preditoras são independentes é uma simplificação, por isso o
+algoritmo é chamado de "naive" (ingênuo), na maioria dos casos as
+variáveis preditoras não são independentes, mas o algoritmo ainda é
+eficaz em muitos casos. Sendo assim a probabilidade conjunta de $x$ e
+$y_j$ é:
+
+$$
+P(x|y_j)P(y_j) = P(x_1|y_j)P(x_2|y_j)P(x_3|y_j)...P(x_p|y_j)P(y_j) \\
+= \prod_{k=1}^{p} P(x_k|y_j)P(y_j)
+$$ Substituindo o numerador da equação de Bayes, temos: $$
+P(y_j | {x}) = \frac{ \prod_{k=1}^p P(x_k | y_j)P(y_j)}{P(x)}
+$$ Perceba que o denominador da equação acima é constante para todas as
+classes.
+
+Por fim temos o nosso classificador de Naive Bayes (classificador
+ingênuo de Bayes):
+
+$$
+\hat{y} = \arg \max_{y_j}  \prod_{k=1}^p P(x_k | y_j)P(y_j)
+$$ Quando temos interesse em classificar um novo dado, calculamos a
+probabilidade de cada classe e escolhemos a classe com maior
+probabilidade, essa regra é chamada de Máxima a Posteriori (MAP), onde a
+classe com a maior probabilidade é chamada de classe máxima a
+posteriori.
+
+# Implementação em R
+
+O conjunto de dados iris é um conjunto de dados clássico que contém
+informações sobre 150 flores de íris, sendo 50 flores de cada uma das
+três espécies de íris (setosa, versicolor e virginica). O conjunto de
+dados contém quatro variáveis preditoras (comprimento da sépala, largura
+da sépala, comprimento da pétala e largura da pétala) e uma variável
+resposta (espécie da íris).
+
+```{r}
+Dados<-iris
+datatable(Dados,
+          class = "row-border hover",
+          options = list(
+            scrollX = TRUE,
+            dom = 'ltipr'
+          ))
+```
+
+Como o conjunto de dados possui 4 variáveis, podemos fazer 2 biplots
+para visualizar os dados. O primeiro biplot apresenta o comprimento e
+largura da sépala e o segundo biplot apresenta o comprimento e largura
+da pétala, de maneira que as espécies de flores são representadas por
+cores diferentes.
+
+```{r}
+G1<-ggplot(Dados, aes(x = Sepal.Length, y = Sepal.Width, color = Species))+
+  geom_point(size = 2)+
+  scale_color_manual(values=c("#cd201f", "#1b6ca8","#3aaf85"))+
+  theme_light()+
+  labs(x = "Comprimento da Sépala", y = "Largura da Sépala", color = "Espécies")
+
+G2<-ggplot(Dados, aes(x = Petal.Length, y = Petal.Width, color = Species))+
+  geom_point(size = 2)+
+  scale_color_manual(values=c("#cd201f", "#1b6ca8","#3aaf85"))+
+  theme_light()+
+  labs(x = "Comprimento da Pétala", y = "Largura da Pétala", color = "Espécies")
+
+G1+G2
+```
+
+## Treinamento do modelo
+
+A função a seguir divide o conjunto de dados em um conjunto de
+treinamento (70% dos dados) e um conjunto de teste (30% dos dados).
+
+```{r}
+treino <- iris$Species %>%
+  createDataPartition(p = 0.7, list = F)
+train <- iris[treino, ]
+test <- iris[-treino, ]
+```
+
+Como a saída da função `naive_bayes` é bem grande, ela basicamente solta uma tabela para cada variável independente para cada classe, então para facilitar a visualização, irei plotar os gráficos de densidade para cada variável independente com cada classe de espécie de uma cor diferente, que é basicamente o que as tabelas iriam tentar representar.
+
+```{r}
+modelo <- naive_bayes(Species ~ ., data = train, usekernel = T)
+G3<-ggplot(Dados,aes(x= Sepal.Length, group = Species))+
+  geom_density(aes(fill = Species), alpha = 0.75)+
+  theme_light()+
+  scale_fill_manual(values=c("#cd201f", "#1b6ca8","#3aaf85"))+
+  labs(x = "Comprimento da Sépala", y = "Densidade", fill = "")+
+   theme(legend.position = "bottom")
+
+G4<-ggplot(Dados,aes(x= Sepal.Width, group = Species))+
+  geom_density(aes(fill = Species), alpha = 0.75)+
+  theme_light()+
+  scale_fill_manual(values=c("#cd201f", "#1b6ca8","#3aaf85"))+
+  labs(x = "Largura da Sépala", y = "Densidade", fill = "")+
+  theme(legend.position = "bottom")
+
+G3+G4
+```
+
+```{r}
+G5<-ggplot(Dados,aes(x= Petal.Length, group = Species))+
+  geom_density(aes(fill = Species), alpha = 0.75)+
+  theme_light()+
+  scale_fill_manual(values=c("#cd201f", "#1b6ca8","#3aaf85"))+
+  labs(x = "Comprimento da Pétala", y = "Densidade", fill = "")+
+  theme(legend.position = "bottom")
+
+G6<-ggplot(Dados,aes(x= Petal.Width, group = Species))+
+  geom_density(aes(fill = Species), alpha = 0.75)+
+  theme_light()+
+  scale_fill_manual(values=c("#cd201f", "#1b6ca8","#3aaf85"))+
+  labs(x = "Largura da Pétala", y = "Densidade", fill = "")+
+  theme(legend.position = "bottom")
+
+G5+G6
+```
+
+
+## Teste do modelo
+Testando o modelo com o conjunto de teste.
+```{r}
+pred <- predict(modelo, test)
+confusionMatrix(pred, test$Species)
+```
+O algoritmo teve uma precisão de 97.8% no conjunto de teste, o que é um resultado muito bom e também teve a mesma precisão que o algoritmo de KNN, que é outro algoritmo de classificação muito utilizado.
+
+
+
+# Referências
+
+-   Berrar, Daniel. (2018). Bayes’ Theorem and Naive Bayes Classifier.
+    10.1016/B978-0-12-809633-8.20473-1.

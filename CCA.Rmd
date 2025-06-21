@@ -1,0 +1,133 @@
+---
+title: "Análise de correlação canônica"
+author: "Matheus Nunes Paiva"
+date: "2024-05-19"
+output: 
+  html_document:
+    highlight: textmate
+    theme: flatly
+    number_sections: yes
+    toc: yes
+    code_folding: hide
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{=html}
+<style>
+body {
+  font-family: "Roboto Thin", sans-serif;
+  font-size: 16px;
+}
+</style>
+```
+```{=html}
+<style>
+body {
+  text-align: justify;
+}
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+options(digits  = 4)
+knitr::opts_chunk$set(dpi = 275)
+knitr::opts_chunk$set(fig.width = 11, fig.height = 8)
+```
+# Introdução
+A Análise de Correlação Canônica (ACC) é uma técnica estatística multivariada sofisticada que tem como objetivo principal descobrir e quantificar a associação entre dois conjuntos de variáveis. Através da criação de combinações lineares, também conhecidas como variáveis canônicas, a ACC maximiza a correlação entre os conjuntos de variáveis. Esta técnica é empregada em uma variedade de campos, incluindo economia, ecologia e psicologia, para analisar a interação entre variáveis multidimensionais e auxiliar na tomada de decisões baseadas em dados. A ACC, portanto, atua como uma ferramenta para explorar a estrutura de correlação entre dois conjuntos de variáveis, fornecendo uma compreensão mais profunda da natureza dessas relações.
+
+
+# Carregando pacotes
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(DT)
+library(ggcorrplot)
+library(corrplot)
+library(CCA)
+library(CCP)
+library(candisc)
+
+```
+
+# Conjunto de dados
+
+Os dados utilizados são do pacote palmerpenguins, que contém informações sobre pinguins. O conjunto de dados contém 344 observações e 8 variáveis. As variáveis que serão utilizadas são:
+bill_length_mm: comprimento do bico em milímetros.
+bill_depth_mm: profundidade do bico em milímetros.
+flipper_length_mm: comprimento da nadadeira em milímetros.
+body_mass_g: massa corporal em gramas.
+
+Essas variáveis serão divididas em dois conjuntos de dados, X e Y, para a análise de correlação canônica.
+
+```{r}
+data("penguins", package = 'palmerpenguins')
+Dados<- penguins
+Dados <- na.omit(Dados)
+Dados<- Dados[,c(3:6)]
+datatable(Dados,
+           class = "row-border hover",
+      options = list(
+        scrollX = TRUE,
+        dom = 'ltipr'
+      ))
+```
+
+
+# Gráfico da matriz de correlação
+
+```{r}
+X<- Dados[,1:2]
+Y<- Dados[,3:4]
+XY<- cbind(X,Y)
+ ggcorrplot(
+            cor(XY),
+            hc.order = T,
+            type = "lower",
+            lab = T,
+            colors = c("#003262", "#FFFFFF", "#D21E1C")
+          )
+```
+
+# Análise de correlação canônica
+
+```{r}
+CCA<-cancor(X,Y, set.names = c("X", "Y"))
+CCA
+```
+A saída anterior apresenta a correlação do par de variáveis canônicas e o teste de hipótese para a significância da correlação canônica. No nosso exemplo, apenas um par de variável canônica foi significativo, utilizando um alpha de 0.05. A correlação do par de variável canônica foi de 0.788 e a porcentagem da variância explicada foi de aproximadamente 99%.
+
+# Coeficientes canônicos
+```{r}
+coef(CCA, type = "both", standardize = T)
+```
+# Gráficos para a verificação da qualidade do ajuste
+
+```{r}
+plot(CCA,  main = "Análise de correlação canônica")
+```
+Este gráfico é o gráfico de dispersão dos escores canônicos. Ele mostra a relação entre os escores canônicos de X e Y. Se os escores canônicos de X e Y estiverem correlacionados, os pontos estarão alinhados em uma linha. Se os escores canônicos de X e Y não estiverem correlacionados, os pontos estarão dispersos. Por padrão a função traça uma elipse que capta 68% dos dados, quanto mais achatada estiver essa elipse, maior a correlação entre os escores canônicos.
+
+Perceba que este gráfico foi feito apenas para o par de variáveis canônicas significativo, caso houvesse mais de um par significativo, deverá ser feito um gráfico para cada par.
+
+```{r}
+heplot(CCA, col=c("red", "black"),var.vectors = "X" ,main = "Hypothesis- Error (HE) plots for canonical correlation analysis")
+```
+
+
+```{r}
+heplot(CCA, col=c("red", "black"),var.vectors = "Y" ,main = "Hypothesis- Error (HE) plots for canonical correlation analysis")
+```
+Os 2 gráficos anteriores são os gráficos de hipótese-erro (HE). Eles mostram a relação entre os escores canônicos e as variáveis originais. Se as variáveis originais estiverem correlacionadas com os escores canônicos, elas estarão alinhadas com os vetores canônicos. Quanto maior o tamanho da reta, mais significativa é a variável original para a variável canônica.
+
+A elipse no centro do gráfico é a elipse para os erros, quanto menor a elipse, melhor o ajuste do modelo.
+
+
+

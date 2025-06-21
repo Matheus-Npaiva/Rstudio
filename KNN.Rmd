@@ -1,0 +1,163 @@
+---
+title: "KNN em R"
+author: "Matheus Nunes"
+date: "2025-01-02"
+output: 
+  html_document:
+    highlight: textmate
+    theme: flatly
+    number_sections: yes
+    toc: yes
+    code_folding: hide
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+options(digits  = 4)
+knitr::opts_chunk$set(dpi = 500)
+knitr::opts_chunk$set(fig.width = 10, fig.height = 8)
+
+```
+
+```{r}
+library(ggplot2)
+library(ggforce)
+library(DT)
+library(caret)
+library(tidyverse)
+```
+
+# KNN (K-Nearest Neighbors) ou K-vizinhos mais próximos
+
+O método KNN é um método de classificação que utiliza a distância entre
+os pontos para classificar novos pontos. O método é baseado na ideia de
+que os pontos mais próximos de um novo ponto são os que mais se
+assemelham a ele. Esta técnica é muito utilizada em aprendizado de
+máquina e é um dos métodos mais simples de classificação.
+
+Para aplicação do método KNN, basta seguirmos os passos abaixo:
+
+-   Fixe $K > 0$ (definir o número de vizinhos a serem considerados) em um
+    conjunto de dados de treinamento.
+
+-   Identificar K pontos do conjunto de dados de treinamento que estejam
+    mais próximo do indivíduo que será classificado, de acordo com
+    alguma medida de distância, este conjunto será denotado como $V_0$
+
+-   Estimar a probabilidade condicional de que o indivíduo pertença a
+    uma população $\pi_j$ como a fração de pontos do conjunto $V_0$, onde os
+    valores de $Y$ sejam iguais a $j$.
+$$
+P(Y = j | X = x_0) = \frac{1}{K} \sum_{i \in V_0} I(y_i = j).
+$$
+Classificamos o indivíduo como pertencente a população com maior probabilidade. 
+
+O exemplo ilustrativo abaixo mostra a aplicação do método KNN em um conjunto de dados fictício, onde temos 2 populações e uma observação. O método é utilizado para classificar a observação em uma das populações, perceba que a observação é classificada na população 1, pois a maioria dos vizinhos mais próximos são da população 1, sendo 3 vizinhos da população 1 e 2 da população 2, isso usando $k = 5$.
+
+```{r}
+set.seed(123)
+pop1 <- data.frame(x = rnorm(10, mean = 3, sd = 1), y = rnorm(10, mean = 3, sd = 1), grupo = "População 1")
+pop2 <- data.frame(x = rnorm(10, mean = 7, sd = 1), y = rnorm(10, mean = 7, sd = 1), grupo = "População 2")
+
+observacao <- data.frame(x = 5, y = 5, grupo = "Observação")
+data <- rbind(pop1, pop2, observacao) 
+ponto_central <- data.frame(x = 5, y = 5) 
+raio <- 2.5
+
+ggplot(data, aes(x = x, y = y, color = grupo)) + geom_point(size = 3) +
+  geom_circle(data = ponto_central, aes(x0 = x, y0 = y, r = raio), color = "black",linetype = "dashed")+
+  theme_minimal() + 
+  labs(color = "") +
+  scale_color_manual(values = c("#cd201f", "#1b6ca8", "#3aaf85"))
+```
+
+# KNN no R
+
+O conjunto de dados `iris` é um conjunto de dados muito utilizado para treinar modelos de classificação, ele contém 150 observações de 4 variáveis (comprimento e largura da sépala e pétala) e uma variável de classe (espécie da flor).
+
+```{r}
+Dados<-iris
+datatable(Dados,
+          class = "row-border hover",
+          options = list(
+            scrollX = TRUE,
+            dom = 'ltipr'
+          ))
+```
+
+
+Para aplicar o método KNN no R, utilizamos a função `train` do pacote `caret`. A função `train` é utilizada para treinar modelos de aprendizado de máquina, e o método KNN é um dos métodos disponíveis. A função `train` recebe como argumentos a fórmula de classificação, o conjunto de dados de treinamento, o método de classificação, o controle de treinamento e a métrica de avaliação. Separamos os dados em treino e teste, e utilizamos a função `createDataPartition` para criar os índices de treino e teste.
+
+```{r}
+set.seed(123)
+treino <- iris$Species %>%
+  createDataPartition(p = 0.7, list = F)
+train <- iris[treino, ]
+test <- iris[-treino, ]
+
+knn_model <- train(Species ~ ., data = train, method = "knn", trControl = trainControl(method = "cv"), tuneGrid=expand.grid(k=1:5), metric = "Accuracy")
+
+knn_model
+
+```
+Para este exemplo usei um valor de $k$ variando de 1 a 5, mas fica a cargo do usuário definir o valor de $k$ que melhor se ajusta ao problema. Neste conjunto de dados o melhor valor de $k$ foi 5
+que apresentou uma acurácia de aproximadamente 97%.
+
+Para testar a acurácia do modelo, aplicamos o modelo nos dados de teste e utilizamos a função `confusionMatrix` para calcular a matriz de confusão.
+```{r}
+pred <- predict(knn_model, test)
+confusionMatrix(pred, test$Species)
+```
+O modelo cometeu apenas um erro, classificando uma observação da espécie `virginica` como `versicolor`, e apresentou uma acurácia de aproximadamente 98%, essa acurácia é levemente superior ao método de análise de discrimante linear que usamos nesse mesmo conjunto de dados, você pode encontrar a análise no meu Rpubs.
+
+## Kappa de Cohen
+
+A estatística Kappa de Cohen é uma medida de concordância entre dois observadores, ela é utilizada para avaliar a concordância entre a classificação do modelo e a classificação real. Quanto mais próximo de 1, melhor a concordância. A estatística Kappa de Cohen é calculada pela fórmula:
+
+$$
+kappa = \frac{p_o - p_e}{1 - p_e},
+$$
+Onde $p_o$ é a proporção de concordância observada e $p_e$ é a proporção de concordância esperada. A proporção de concordância observada é a proporção de observações que foram classificadas corretamente, e a proporção de concordância esperada é a proporção de observações que seriam classificadas corretamente ao acaso.
+
+$$p_o = \frac{15 + 15 + 14}{45} = 0,9777... \\
+p_e = 0,333 \\
+kappa = \frac{0,9777... - 0,333}{1 - 0,333} \approx 0,9666...
+$$
+A probabilidade de acerto ao acaso é de 33,33%, e a concordância observada foi de 97,77%, o que resulta em um kappa de 96,66%, indicando uma concordância quase perfeita entre o modelo e a classificação real.
+
+A probabilidade de acerto ao acaso $p_e$ é calculada da seguinte maneira:
+a probabilidade do modelo dizer Setosa, Versicolor e Virginica respectivamente é:
+$$setosa = 15/45 = 0,333...; versicolor = 16/45 0,3555...; virginica = 14/45 = 0,3111...$$
+A probabilidade de se escolher Setosa, versicolor e virginica ao acaso é de 33,33% para cada uma:
+$$setosa = 15/45 = 0,333...; versicolor = 15/45 = 0,333...; virginica = 15/45 = 0,3333...$$
+
+Por fim temos a probabilidade de concordância ao acaso $p_e$:
+$$0,333 \times 0,333 + 0,3555 \times 0,333 + 0,3111 \times 0,333 = 0,3333...$$
+
+
+A figura a seguir mostra a acurácia do modelo para diferentes valores de $k$.
+```{r}
+ggplot(knn_model)+
+  theme_light()+
+  scale_x_continuous(breaks = seq(1, 5, 1))+
+  geom_line(color = "#1b6ca8")+
+  geom_point(color = "steelblue")
+```
+
+Observando a figura acima, percebemos que o modelo apresenta uma acurácia de aproximadamente 97% para $k = 5$, e a acurácia diminui para valores de $k$ menores que 5.
+
+# Conclusão
+
+O método KNN é um método de classificação muito utilizado em aprendizado de máquina, ele é um dos métodos mais simples de classificação e é baseado na ideia de que os pontos mais próximos de um novo ponto são os que mais se assemelham a ele. O método KNN é muito utilizado em problemas de classificação, e é um dos métodos mais simples de classificação. Ele possui algumas desvantagens tais como a sensibilidade a outliers, geralmente é computacionalmente caro e não é muito eficiente para conjuntos de dados grandes, geralmente é ruim para dados desbalanceados, onde alguma população é muito maior que a outra.
+
+# Referências
+
+
+-   MORETTIN, Pedro Alberto; SINGER, Júlio da Motta. Estatística e ciência de dados. Rio de Janeiro, LTC, 2022. 454 p.

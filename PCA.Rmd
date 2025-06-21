@@ -1,0 +1,281 @@
+---
+title: "Análise de Componentes Principais"
+author: "Matheus Nunes Paiva"
+date: "2024-05-12"
+output: 
+  html_document:
+    highlight: textmate
+    theme: flatly
+    number_sections: yes
+    toc: yes
+    code_folding: hide
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+      runtime: shiny
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{=html}
+<style>
+body {
+  font-family: "Roboto Thin", sans-serif;
+  font-size: 16px;
+}
+</style>
+```
+```{=html}
+<style>
+body {
+  text-align: justify;
+}
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+options(digits  = 4)
+knitr::opts_chunk$set(dpi = 275)
+knitr::opts_chunk$set(fig.width = 11, fig.height = 8)
+```
+
+# Introdução
+
+A Análise de Componentes Principais (ACP) é uma técnica estatística que
+permite simplificar a complexidade dos dados ao reduzir o número de
+dimensões sem perder a maior parte da informação original. Os
+componentes principais são os novos eixos que retêm a maior variância
+dos dados originais. A quantidade de variância mantida por cada
+componente é quantificada pelo autovalor ou valor próprio.
+
+A ACP permite a visualização gráfica dos componentes principais, algo
+que é desafiador quando lidamos com mais de três variáveis. Esta técnica
+é particularmente útil quando temos um conjunto de variáveis altamente
+correlacionadas, indicando a presença de redundância nos dados. Uma
+correlação mais forte entre as variáveis permite que um menor número de
+componentes seja usado para explicar a maior parte da variância. Isso
+torna a ACP uma ferramenta poderosa para a simplificação e interpretação
+de dados complexos.
+
+# Carregando os pacotes
+
+```{r}
+library(tidyverse)
+library(readr)
+library(FactoMineR)
+library(factoextra)
+library(DT)
+library(ggplot2)
+library(ggcorrplot)
+library(corrplot)
+library(gt)
+```
+
+# Carregando os dados
+
+O conjunto de dados utilizado nesta análise contém informações sobre
+incêndios florestais na região de Montesinho, em Portugal. O conjunto de
+dados contém 517 observações e 13 variáveis, incluindo informações sobre
+a localização dos incêndios, o mês em que ocorreram, o tamanho do
+incêndio, o dia da semana, entre outras informações.
+
+As variáveis são as seguintes:
+
+1.  X - coordenada espacial do eixo x dentro do mapa do parque
+    Montesinho: 1 a 9
+
+2.  Y - coordenada espacial do eixo y dentro do mapa do parque
+    Montesinho: 2 a 9
+
+3.  month - mês do ano: ‘jan’ a ‘dez’
+
+4.  day - dia da semana: ‘seg’ a ‘dom’
+
+5.  FFMC - índice FFMC do sistema FWI: 18.7 a 96.20
+
+6.  DMC - índice DMC do sistema FWI: 1.1 a 291.3
+
+7.  DC - índice DC do sistema FWI: 7.9 a 860.6
+
+8.  ISI - índice ISI do sistema FWI: 0.0 a 56.10
+
+9.  temp - temperatura em graus Celsius: 2.2 a 33.30
+
+10. RH - umidade relativa em %: 15.0 a 100
+
+11. wind - velocidade do vento em km/h: 0.40 a 9.40
+
+12. rain- chuva externa em mm/m2: 0.0 a 6.4
+
+13. área - a área queimada da floresta (em ha): 0.00 a 1090.84.
+
+```{r}
+dados <- read.csv("forestfires.csv", sep = ",")
+datatable(dados,
+           class = "row-border hover",
+      options = list(
+        scrollX = TRUE,
+        dom = 'ltipr'
+      ))
+```
+
+Vamos extrair apenas as variáveis numéricas para a análise.
+
+```{r}
+dados_num <- dados[,c(5:13)]
+datatable(dados_num,
+           class = "row-border hover",
+      options = list(
+        scrollX = TRUE,
+        dom = 'ltipr'
+      ))
+```
+
+# Alguns resultados preliminares
+
+## Matriz de correlação
+
+```{r}
+ ggcorrplot(
+            cor(dados_num),
+            hc.order = T,
+            type = "lower",
+            lab = T,
+            colors = c("#003262", "#FFFFFF", "#D21E1C")
+          )
+
+```
+
+Pela matriz de correlação é possível observar que a maioria das
+variáveis estão fracamente correlacionadas entre si, o que pode ser ruim
+para a análise de componentes principais, pois quanto mais
+correlacionadas as variáveis, mais fácil é a interpretação dos
+componentes.
+
+## Matriz de variância-covariância
+
+```{r}
+Mcov<-cov(dados_num)
+Mcov<-round(Mcov, 4)
+datatable(Mcov,
+           class = "row-border hover",
+      options = list(
+        scrollX = TRUE,
+        dom = 'ltipr'
+      ))
+
+```
+
+Calculado a variância total e variância generalizada respectivamente.
+
+```{r}
+
+sum(diag(Mcov))
+
+det(Mcov)
+
+```
+
+# Análise de Componentes Principais
+
+```{r}
+res.pca<-PCA(dados_num, graph = F)
+eig.val <- as.data.frame(get_eigenvalue(res.pca))
+row.names(eig.val) <- c("Componente.1", "Componente.2", "Componente.3", "Componente.4", "Componente.5", "Componente.6", "Componente.7", "Componente.8", "Componente.9")
+nomes<-rownames(eig.val)
+eig.val<-cbind(nomes, eig.val)
+colnames(eig.val)<-c("Componente", "Autovalor", "Percentual", "Acumulado")
+gt(eig.val) %>%
+  tab_header(title = "Resumo dos componentes") %>%
+  fmt_number(columns = c(2:4), decimals = 4) %>%
+  opt_stylize(style = 3, color = "blue") %>%
+  tab_options(table.width ="500px") 
+
+```
+
+A tabela resumo dos componentes apresetna os autovalores, o percentual
+de variância explicada por cada componente e o percentual acumulado de
+variância explicada.
+
+O ideal é selecionar os componentes que possuem autovalores maiores que
+1, pois estes são os componentes que explicam mais variância do que uma
+variável original, ou também selecionar os componentes que explicam no
+mínimo 70% da variância total.
+
+Para este exemplo irei ultilizar os 5 primeiros componentes.
+
+```{r}
+fviz_eig(res.pca, addlabels = TRUE, xlab='Componentes', ylab = 'Percentual da variância explicada', ylim = c(0, 50))
+
+```
+
+Acima está o gráfico de autovalores, que mostra a quantidade de
+variância explicada por cada componente.
+
+```{r}
+fviz_pca_var(res.pca, col.var = "contrib",
+             axes = c(1, 2),
+             gradient.cols = c("#003262", "#E7B800", "#D21E1C"),
+             repel = TRUE 
+)
+```
+
+```{r}
+fviz_pca_var(res.pca, col.var = "contrib",
+             axes = c(3, 4),
+             gradient.cols = c("#003262", "#E7B800", "#D21E1C"),
+             repel = TRUE 
+)
+```
+
+Acima estão 2 gráficos para os componentes 1 e 2 e 3 e 4,
+respectivamente. Os gráficos mostram a contribuição de cada variável
+para a formação dos componentes, quanto menor a reta que liga a variável
+ao componente, menor é a contribuição da variável para a formação do
+componente.
+
+O ideal seria plotar um gráfico para cada combinação de componentes, mas
+para este exemplo irei plotar apenas para os componentes 1 e 2 e 3 e 4.
+
+```{r}
+colors = c("#003262", "#FFFFFF", "#FF0000")
+pal = colorRampPalette(colors)
+grad_colors = pal(1000)
+corrplot(res.pca$var$cos2, is.corr=FALSE, col=grad_colors)
+```
+
+O gráfico acima mostra a contribuição de cada variável para a formação
+dos componentes. Quanto mais próximo de 1, maior é a contribuição da
+variável para a formação do componente.
+
+```{r}
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 10,
+             title ="Contribuição das variáveis para o componente 1"
+)
+```
+
+```{r}
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 10,
+             title ="Contribuição das variáveis o componente 2"
+)
+```
+
+```{r}
+fviz_contrib(res.pca, choice = "var", axes = 3, top = 10,
+             title ="Contribuição das variáveis o componente 3"
+)
+```
+
+Os gráficos acima mostram a contribuição de cada variável para a
+formação dos componentes. Quanto mais próximo de 1, maior é a
+contribuição da variável para a formação do componente. A linha
+tracejada em vermelho é o valor esperado de contribuição, ou seja,
+1/número de variáveis. Para este exemplo eu plotei apenas para os
+componentes 1, 2 e 3.
+
+# Referências
+
+Cortez,Paulo and Morais,Anbal. (2008). Forest Fires. UCI Machine
+Learning Repository. <https://doi.org/10.24432/C5D88D>.
